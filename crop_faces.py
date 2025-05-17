@@ -7,11 +7,13 @@ import shutil
 # Configuration
 input_base_dir = "input_folders"  # Base directory containing all input folders
 output_base_dir = "cropped_results"  # Base directory for all output folders
-min_dim = 400  # Minimum width or height of output image
-side_padding_ratio = 0.9  # 50% padding on left/right sides of face
+min_dim = 800  # Increased minimum width or height of output image for better quality
+side_padding_ratio = 0.9  # 90% padding on left/right sides of face
 top_padding_ratio = 0.6  # 60% padding above the face
-bottom_padding_ratio = 0.8  # 100% padding below the face
+bottom_padding_ratio = 0.8  # 80% padding below the face
 confidence_threshold = 0.8  # Minimum confidence for DNN face detection
+output_quality = 100  # JPEG quality (0-100, maximum quality)
+sharpen_amount = 0  # No sharpening
 
 # Initialize face detector (DNN-based for better accuracy)
 # Initialize variables
@@ -146,13 +148,79 @@ def get_optimal_crop_from_landmarks(image, landmarks):
     
     return (x1, y1, x2, y2)
 
+def enhance_image(image):
+    """
+    Apply image enhancements to improve quality
+    """
+    # Apply mild sharpening if sharpen_amount > 0
+    if sharpen_amount > 0:
+        # Create sharpening kernel
+        kernel = np.array([[-1, -1, -1], 
+                           [-1, 9 + sharpen_amount, -1], 
+                           [-1, -1, -1]])
+        
+        # Normalize kernel to avoid brightness changes
+        kernel = kernel / kernel.sum()
+        
+        # Apply sharpening filter
+        image = cv2.filter2D(image, -1, kernel)
+    
+    # Apply minor contrast enhancement
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    
+    # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) on luminance channel
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    
+    # Merge channels and convert back to BGR
+    enhanced_lab = cv2.merge((cl, a, b))
+    enhanced_image = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+    
+    return enhanced_image
+
+def preserve_image_quality(original_path, image):
+    """
+    Determine best format for saving based on original image
+    """
+    ext = os.path.splitext(original_path)[1].lower()
+    
+    # If original is png, preserve transparency and use png
+    if ext == '.png':
+        has_alpha = len(image.shape) == 3 and image.shape[2] == 4
+        if has_alpha:
+            return '.png', []  # Return png extension and empty params
+    
+    # Default to high quality jpeg for other formats
+    return '.jpg', [int(cv2.IMWRITE_JPEG_QUALITY), output_quality]
+
+def resize_high_quality(image, new_width, new_height):
+    """
+    High quality image resizing using multi-step approach
+    """
+    # Get current dimensions
+    h, w = image.shape[:2]
+    
+    # If we need to upscale, use a more advanced scaling approach
+    if new_width > w or new_height > h:
+        # For upscaling, use a multi-scale approach for better quality
+        # First resize to 2x the original size with CUBIC interpolation
+        scale_factor = min(2.0, min(new_width/w, new_height/h))
+        if scale_factor > 1:
+            inter_w = int(w * scale_factor)
+            inter_h = int(h * scale_factor)
+            image = cv2.resize(image, (inter_w, inter_h), interpolation=cv2.INTER_CUBIC)
+    
+    # Final resize to target dimensions with LANCZOS4 for best quality
+    return cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+
 def crop_face(image_path, show_detection=False):
     """
     Main function to detect and crop faces from an image
     """
     try:
-        # Read image
-        img = cv2.imread(image_path)
+        # Read image at highest quality
+        img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
         if img is None:
             print(f"Error: Can't read image: {image_path}")
             return None
@@ -167,7 +235,10 @@ def crop_face(image_path, show_detection=False):
             vis_img = img.copy()
         
         # Convert to grayscale for face detection
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if len(img.shape) == 3 and img.shape[2] == 4:  # Handle alpha channel
+            gray = cv2.cvtColor(cv2.cvtColor(img, cv2.COLOR_BGRA2BGR), cv2.COLOR_BGR2GRAY)
+        else:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
         # Detect faces
         faces = []
@@ -232,14 +303,16 @@ def crop_face(image_path, show_detection=False):
         # Crop the image
         cropped = img[y1:y2, x1:x2].copy()
         
-        # Ensure minimum dimensions
+        # Ensure minimum dimensions while preserving aspect ratio
         h_crop, w_crop = cropped.shape[:2]
         if h_crop < min_dim or w_crop < min_dim:
             # Calculate scale while preserving aspect ratio
             scale = max(min_dim / h_crop, min_dim / w_crop)
             new_w = int(w_crop * scale)
             new_h = int(h_crop * scale)
-            cropped = cv2.resize(cropped, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+            cropped = resize_high_quality(cropped, new_w, new_h)
+        
+        # No enhancement applied - as requested
         
         return cropped
         
@@ -258,7 +331,7 @@ def process_folder(input_folder, output_folder, debug_mode=False):
     
     # Get list of image files
     image_files = [f for f in os.listdir(input_folder) 
-                  if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
+                  if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'))]
     
     if not image_files:
         print(f"No image files found in {input_folder}")
@@ -273,9 +346,20 @@ def process_folder(input_folder, output_folder, debug_mode=False):
         face_img = crop_face(path, show_detection=debug_mode)
         
         if face_img is not None:
-            # Save cropped image to the output folder
-            save_path = os.path.join(output_folder, filename)
-            cv2.imwrite(save_path, face_img)
+            # Determine best format and quality settings for saving
+            out_ext, params = preserve_image_quality(path, face_img)
+            
+            # Generate output filename, potentially changing extension
+            base_name = os.path.splitext(filename)[0]
+            out_filename = base_name + out_ext
+            save_path = os.path.join(output_folder, out_filename)
+            
+            # Save cropped image to the output folder with optimal quality settings
+            if params:
+                cv2.imwrite(save_path, face_img, params)
+            else:
+                cv2.imwrite(save_path, face_img)
+                
             print(f"✓ Successfully cropped: {save_path}")
             success_count += 1
         else:
@@ -287,6 +371,15 @@ def process_folder(input_folder, output_folder, debug_mode=False):
 def main():
     # Process command-line arguments
     debug_mode = "--debug" in sys.argv
+    high_quality_mode = "--high-quality" in sys.argv or "-hq" in sys.argv
+    
+    # Adjust quality settings if high quality mode is requested
+    global output_quality, sharpen_amount, min_dim
+    if high_quality_mode:
+        output_quality = 100  # Maximum JPEG quality
+        sharpen_amount = 0    # No sharpening
+        min_dim = 1200        # Higher minimum dimension
+        print("High quality mode enabled")
     
     # Create base output directory
     os.makedirs(output_base_dir, exist_ok=True)
