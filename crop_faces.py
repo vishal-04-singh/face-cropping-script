@@ -8,9 +8,9 @@ import shutil
 input_base_dir = "input_folders"  # Base directory containing all input folders
 output_base_dir = "cropped_results"  # Base directory for all output folders
 min_dim = 400  # Minimum width or height of output image
-side_padding_ratio = 0.5  # 50% padding on left/right sides of face
+side_padding_ratio = 0.9  # 50% padding on left/right sides of face
 top_padding_ratio = 0.6  # 60% padding above the face
-bottom_padding_ratio = 1  # 100% padding below the face
+bottom_padding_ratio = 0.8  # 100% padding below the face
 confidence_threshold = 0.8  # Minimum confidence for DNN face detection
 
 # Initialize face detector (DNN-based for better accuracy)
@@ -247,12 +247,11 @@ def crop_face(image_path, show_detection=False):
         print(f"Error processing {image_path}: {str(e)}")
         return None
 
-def process_folder(input_folder, output_folder, failed_folder, debug_mode=False):
+def process_folder(input_folder, output_folder, debug_mode=False):
     """
     Process all images in a single folder
     """
     os.makedirs(output_folder, exist_ok=True)
-    os.makedirs(failed_folder, exist_ok=True)
     
     success_count = 0
     fail_count = 0
@@ -280,10 +279,7 @@ def process_folder(input_folder, output_folder, failed_folder, debug_mode=False)
             print(f"✓ Successfully cropped: {save_path}")
             success_count += 1
         else:
-            # Copy failed image to the failed folder
-            failed_path = os.path.join(failed_folder, filename)
-            shutil.copy2(path, failed_path)
-            print(f"✗ Failed to crop: {filename} - Copied to {failed_folder}")
+            print(f"✗ Failed to crop: {filename}")
             fail_count += 1
     
     return success_count, fail_count
@@ -312,13 +308,12 @@ def main():
     for folder_name in input_folders:
         input_folder = os.path.join(input_base_dir, folder_name)
         output_folder = os.path.join(output_base_dir, folder_name)
-        failed_folder = os.path.join(output_folder, "failed")
         
         print(f"\n{'='*50}")
         print(f"Processing folder: {folder_name}")
         print(f"{'='*50}")
         
-        success, fail = process_folder(input_folder, output_folder, failed_folder, debug_mode)
+        success, fail = process_folder(input_folder, output_folder, debug_mode)
         total_success += success
         total_fail += fail
         
