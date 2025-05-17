@@ -19,7 +19,8 @@ project/
 │   ├── opencv_face_detector_uint8.pb
 │   └── opencv_face_detector.pbtxt
 ├── your_script.py
-├── input.jpg
+├── input_folders
+├── cropped_folders
 └── README.md
 ```
 
