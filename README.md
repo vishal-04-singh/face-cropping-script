@@ -1,88 +1,108 @@
+# Face Detector and Auto-Cropper
 
-# OpenCV DNN Face Detection
+This tool automatically detects faces in images and crops them with appropriate padding for portraits or profile pictures. It processes multiple folders of images in batch mode and saves the results in a structured output directory.
 
-This project demonstrates how to use OpenCV's DNN (Deep Neural Network) module to detect faces in images using a pre-trained TensorFlow model.
+## Features
 
-## 📦 Features
+- **Face Detection**: Uses OpenCV's DNN face detector (preferred) or Haar Cascade as fallback
+- **Facial Landmark Detection**: Improves cropping alignment when available
+- **Batch Processing**: Process entire folders of images at once
+- **Smart Cropping**: Optimized padding ratios for professional-looking portraits
+- **Quality Preservation**: Maintains original image quality and format
+- **High-Quality Resizing**: Uses multi-step approach for better quality when enlarging
+- **Debug Mode**: Visualizes detection areas for troubleshooting
 
-- Uses OpenCV's DNN module for face detection
-- Loads TensorFlow `.pb` model and `.pbtxt` configuration
-- Detects faces in images with confidence scores
+## Requirements
 
----
+- Python 3.6+
+- OpenCV (cv2)
+- NumPy
 
-## 📁 Folder Structure
+## Installation
+
+1. Clone or download this repository
+2. Install required packages:
+   ```
+   pip install opencv-python numpy
+   ```
+3. (Optional) Download DNN face detection models for improved accuracy:
+   - Create a `models` folder in the project directory
+   - Download the model files:
+     - `opencv_face_detector_uint8.pb`
+     - `opencv_face_detector.pbtxt`
+     - `lbfmodel.yaml` (for facial landmarks)
+
+## Directory Structure
 
 ```
-project/
-├── models/
-│   ├── opencv_face_detector_uint8.pb
-│   └── opencv_face_detector.pbtxt
-├── your_script.py
-├── input_folders
-├── cropped_folders
-└── README.md
+├── input_folders/
+│   ├── folder1/
+│   │   ├── image1.jpg
+│   │   ├── image2.png
+│   │   └── ...
+│   ├── folder2/
+│   │   └── ...
+│   └── ...
+├── cropped_results/
+│   ├── folder1/
+│   │   ├── image1.jpg
+│   │   ├── image2.png
+│   │   └── ...
+│   ├── folder2/
+│   │   └── ...
+│   └── ...
+└── models/
+    ├── opencv_face_detector_uint8.pb
+    ├── opencv_face_detector.pbtxt
+    └── lbfmodel.yaml
 ```
 
----
+## Usage
 
-## 🧠 Model Files
+1. Place your images in folders inside the `input_folders` directory
+2. Run the script:
+   ```
+   python face_crop.py
+   ```
+3. Cropped images will be saved to corresponding folders in `cropped_results`
 
-This project uses a pre-trained face detector model from OpenCV:
+### Command Line Options
 
-- `opencv_face_detector_uint8.pb` (TensorFlow model)
-- `opencv_face_detector.pbtxt` (Model configuration)
+- `--debug`: Show detection rectangles and save debug images
+- `--high-quality` or `-hq`: Enable high-quality mode with larger output images (1200px min dimension)
 
-> You must download both files and place them in the `models/` folder.
+## Configuration
 
-### 🔗 Download Links
+You can modify these variables at the top of the script to customize behavior:
 
-- [opencv_face_detector_uint8.pb](https://github.com/spmallick/learnopencv/blob/master/AgeGender/opencv_face_detector_uint8.pb?raw=true)
-- [opencv_face_detector.pbtxt](https://github.com/opencv/opencv/blob/4.x/samples/dnn/face_detector/opencv_face_detector.pbtxt?raw=true)
-
----
-
-## 🚀 Getting Started
-
-### 1. Clone this repository
-
-```bash
-git clone https://github.com/yourusername/face-detection-dnn-opencv.git
-cd face-detection-dnn-opencv
+```python
+min_dim = 800                # Minimum dimension of output images
+side_padding_ratio = 0.9     # Padding on left/right sides
+top_padding_ratio = 0.6      # Padding above face
+bottom_padding_ratio = 0.8   # Padding below face
+confidence_threshold = 0.8   # Minimum confidence for DNN detector
+output_quality = 100         # JPEG output quality (1-100)
+sharpen_amount = 0           # Amount of sharpening (0 = disabled)
 ```
 
-### 2. Install dependencies
+## How It Works
 
-```bash
-pip install opencv-python
-```
+1. The script scans all folders within `input_folders`
+2. For each image, it:
+   - Detects faces using DNN or Haar cascade
+   - When available, uses facial landmarks for better alignment
+   - Applies smart padding based on face dimensions
+   - Ensures minimum output dimensions
+   - Preserves original format (PNG/JPG) and quality
+   - Saves to the corresponding output folder
 
-### 3. Run the script
+## Troubleshooting
 
-```bash
-python your_script.py
-```
+- **No faces detected**: Try adjusting the `confidence_threshold` to a lower value
+- **Poor cropping**: Use `--debug` to visualize detection areas
+- **Low quality results**: Use `--high-quality` mode or adjust `output_quality` and `min_dim`
+- **Missing models**: The script will fall back to Haar cascade if DNN models are not available
 
-> Replace `your_script.py` with the actual filename.
+## License
 
----
-
-## 📝 Notes
-
-- Ensure your input image path is correct in the script.
-- The model detects frontal faces with good accuracy and speed.
-- Modify the script to work with live webcam feed, video, or multiple images.
-
----
-
-## 🧑‍💻 Author
-
-**Your Name**  
-📧 Email: your.email@example.com  
-🔗 LinkedIn: [your-linkedin](https://linkedin.com/in/your-profile)
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
+[MIT License](LICENSE)
